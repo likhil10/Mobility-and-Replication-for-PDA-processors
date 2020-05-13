@@ -1,0 +1,13 @@
+{"name":"testPDA",
+    "states":["q1","q2","q3","q4"],
+    "input_alphabet":["1","0"],
+    "stack_alphabet":["1","0"],
+    "accepting_states":["q1","q4"],
+    "start_state":"q1",
+    "transitions":[
+        ["q1","null","null","q2","$"],
+        ["q2","1","null","q2","1"],
+        ["q2","0","1","q3","null"],
+        ["q3","0","1","q3","null"],
+        ["q3","null","$","q4","null"]],
+    "eos":"$"}

@@ -1,0 +1,18 @@
+curl -X PUT -H "Content-Type: application/json" -d '{"ID":"1", "Name":"hellobufallo"}' http://localhost:10000/pdas/1
+curl -X PUT -H "Content-Type: application/json" -d '{"name":"mkyong","email":"abc@gmail.com"}' http://localhost:10000/pdas/100
+
+
+for windows:
+for pda
+curl -X PUT -d "{\"id\": \"1\", \"name\": \"HelloPDA\", \"states\": [\"q1\",\"q2\",\"q3\",\"q4\"], \"inputAlphabet\" : [\"0\", \"1\"] , \"stackAlphabet\" : [\"0\",\"1\"], \"acceptingStates\" : [\"q1\",\"q4\"], \"startState\":\"q1\",\"transitions\":[[\"q1\",\"null\",\"null\",\"q2\",\"$\"],[\"q2\",\"0\",\"null\",\"q2\",\"0\"],[\"q2\",\"1\",\"0\",\"q3\",\"null\"],[\"q3\",\"1\",\"0\",\"q3\",\"null\"],[\"q3\",\"null\",\"$\",\"q4\",\"null\"]], \"eos\":\"$\"}" -H "Content-Type:application/json" localhost:10000/pdas/1
+
+for token/position:
+curl -X PUT -d "{\"tokens\": \"0\"}" -H "Content-Type:application/json" localhost:10000/pdas/1/tokens/2
+curl -X PUT -d "{\"tokens\": \"1\"}" -H "Content-Type:application/json" localhost:10000/pdas/1/tokens/1
+
+for reset:
+curl -X PUT -d "{}" -H "Content-Type:application/json" localhost:10000/pdas/1/reset
+
+for eos:
+
+curl -X PUT -d "{}" -H "Content-Type:application/json" localhost:10000/pdas/1/eos/2

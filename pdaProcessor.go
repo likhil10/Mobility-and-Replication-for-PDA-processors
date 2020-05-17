@@ -71,9 +71,22 @@ type TokenList struct {
 	Tokens string `json:"tokens"`
 }
 
+// ReplicaGroup struct
+type ReplicaGroup struct {
+	// stores the group ID
+	GID string `json:"gid"`
+
+	//stores thegroup members
+	GroupMembers []string `json:"groupmembers"`
+
+	//store the group specification
+	GroupCode PdaProcessor `json:"groupcode"`
+}
+
 var pdaArr []PdaProcessor
 var tokenArr []TokenList
 var positionArr []int
+var replicaGroupArray []ReplicaGroup
 
 // Declares the end of string
 func eos(pda *PdaProcessor) {
@@ -108,6 +121,53 @@ func open(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// Unmarshals the jsonText string. Returns true if it succeeds.
+func openReplicaGroup(w http.ResponseWriter, r *http.Request) bool {
+
+	// unmarshal the body of PUT request into new PDA struct and append this to our PDA array.
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	params := mux.Vars(r)
+	var rg ReplicaGroup
+	json.Unmarshal(reqBody, &rg)
+
+	if len(replicaGroupArray) > 0 {
+		for i := 0; i < len(replicaGroupArray); i++ {
+			if replicaGroupArray[i].GID == params["gid"] {
+				return false
+			}
+			replicaGroupArray = append(replicaGroupArray, rg)
+		}
+	} else {
+		// update our global replicaGroupArray array
+		replicaGroupArray = append(replicaGroupArray, rg)
+	}
+
+	for j := 0; j < len(replicaGroupArray); j++ {
+		if replicaGroupArray[j].GID == rg.GID {
+			gcode := replicaGroupArray[j].GroupCode
+			for k := 0; k < len(replicaGroupArray[j].GroupMembers); k++ {
+				member := replicaGroupArray[j].GroupMembers
+				for l := 0; l < len(pdaArr); l++ {
+					if member[k] == pdaArr[l].ID {
+						pdaArr[l].States = gcode.States
+						pdaArr[l].InputAlphabet = gcode.InputAlphabet
+						pdaArr[l].StackAlphabet = gcode.StackAlphabet
+						pdaArr[l].AcceptingStates = gcode.AcceptingStates
+						pdaArr[l].StartState = gcode.StartState
+						pdaArr[l].Transitions = gcode.Transitions
+						pdaArr[l].Eos = gcode.Eos
+					} else {
+						pdaArr = append(pdaArr, gcode)
+						pdaArr[len(pdaArr)-1].ID = member[l]
+					}
+				}
+			}
+		}
+	}
+
+	return true
+}
+
 // A function that calls panic if it detects an error.
 func check(e error) {
 	if e != nil {
@@ -135,7 +195,6 @@ func put(pda *PdaProcessor, position int, token string) {
 gotoPoint:
 	if takeToken {
 		takeToken = false
-		fmt.Printf("hello sexy")
 		for j := 1; j < transitionLength; j++ {
 			t := transitions[j]
 			if t[0] == pda.CurrentState && t[1] == token && t[2] == pda.CurrentStack {

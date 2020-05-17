@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 
@@ -21,13 +22,17 @@ func showPdas(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pdaArr)
 }
 
+func showReplicaGroups(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Endpoint Hit: returnAllReplicaGroups")
+	json.NewEncoder(w).Encode(replicaGroupArray)
+}
+
 func createNewPda(w http.ResponseWriter, r *http.Request) {
 
 	// unmarshal the body of PUT request into new PDA struct and append this to our PDA array.
 	params := mux.Vars(r)
 	var enter bool
 	var rValue bool
-	fmt.Println(params)
 	if len(pdaArr) > 0 {
 		for i := 0; i < len(pdaArr); i++ {
 			fmt.Println(pdaArr[i].ID)
@@ -37,7 +42,6 @@ func createNewPda(w http.ResponseWriter, r *http.Request) {
 				break
 			} else {
 				enter = true
-				fmt.Println("HELLO JI")
 			}
 		}
 	} else {
@@ -52,15 +56,88 @@ func createNewPda(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func createNewReplicaGroup(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("Endpointhit: create new replica group")
+	// unmarshal the body of PUT request into new PDA struct and append this to our PDA array.
+	vars := mux.Vars(r)
+	var enter bool
+	var rValue bool
+	var id = vars["gid"]
+	if len(replicaGroupArray) > 0 {
+		for i := 0; i < len(replicaGroupArray); i++ {
+			if replicaGroupArray[i].GID == id {
+				enter = false
+				fmt.Fprintf(w, "Replica Group already exists")
+				break
+			} else {
+				enter = true
+			}
+		}
+	} else {
+		enter = true
+	}
+	if enter {
+		rValue = openReplicaGroup(w, r)
+	}
+
+	if rValue {
+		fmt.Fprintf(w, "Replica Group successfully created")
+	}
+}
+
+func joinPda(w http.ResponseWriter, r *http.Request) {
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var replica string
+	vars := mux.Vars(r)
+	json.Unmarshal(reqBody, &replica)
+	var id = vars["gid"]
+	for i := 0; i < len(replicaGroupArray); i++ {
+		if replicaGroupArray[i].GID == replica {
+			replicaGroupArray[i].GroupMembers = append(replicaGroupArray[i].GroupMembers, id)
+			gcode := replicaGroupArray[i].GroupCode
+			for l := 0; l < len(pdaArr); l++ {
+				if id == pdaArr[l].ID {
+					pdaArr[l].States = gcode.States
+					pdaArr[l].InputAlphabet = gcode.InputAlphabet
+					pdaArr[l].StackAlphabet = gcode.StackAlphabet
+					pdaArr[l].AcceptingStates = gcode.AcceptingStates
+					pdaArr[l].StartState = gcode.StartState
+					pdaArr[l].Transitions = gcode.Transitions
+					pdaArr[l].Eos = gcode.Eos
+				} else {
+					pdaArr = append(pdaArr, gcode)
+					pdaArr[len(pdaArr)-1].ID = id
+				}
+			}
+		}
+	}
+}
+
 func resetPDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	for i := 0; i < len(pdaArr); i++ {
 		if pdaArr[i].ID == id {
-			fmt.Println("entered the if block")
 			pdaArr[i].TokenStack = []string{}
 			pdaArr[i].CurrentState = pdaArr[i].StartState
 			pdaArr[i].TransitionStack = []string{}
+			break
+		} else {
+			fmt.Fprintf(w, "Error finding PDA")
+		}
+	}
+}
+
+func resetReplicaGroup(w http.ResponseWriter, r *http.Request) {
+	var vars = mux.Vars(r)
+	var id = vars["gid"]
+	for i := 0; i < len(replicaGroupArray); i++ {
+		if replicaGroupArray[i].GID == id {
+			groupCode := replicaGroupArray[i].GroupCode
+			groupCode.TokenStack = []string{}
+			groupCode.CurrentState = groupCode.StartState
+			groupCode.TransitionStack = []string{}
 			break
 		} else {
 			fmt.Fprintf(w, "Error finding PDA")
@@ -108,7 +185,7 @@ func putPda(w http.ResponseWriter, r *http.Request) {
 func getTokens(w http.ResponseWriter, r *http.Request) {
 	// parse the path parameters
 	vars := mux.Vars(r)
-	// extract the `id` of the pda we wish to delete
+	// extract the `id` of the pda
 	id := vars["id"]
 
 	// we then need to loop through all our pdas
@@ -141,6 +218,26 @@ func deletePda(w http.ResponseWriter, r *http.Request) {
 			break
 		} else {
 			fmt.Fprintf(w, "Error finding PDA")
+		}
+	}
+}
+
+func deleteReplica(w http.ResponseWriter, r *http.Request) {
+	// parse the path parameters
+	vars := mux.Vars(r)
+	// extract the `gid` of the replica group we wish to delete
+	id := vars["gid"]
+
+	// we then need to loop through all our replica groups
+	for index, replica := range replicaGroupArray {
+		// if our gid path parameter matches one of the replicas
+		if replica.GID == id {
+			// updates our replicaGroupArray array to remove the replica
+			replicaGroupArray = append(replicaGroupArray[:index], replicaGroupArray[index+1:]...)
+			fmt.Fprintf(w, "Replica successfully deleted!")
+			break
+		} else {
+			fmt.Fprintf(w, "Error finding Replica")
 		}
 	}
 }
@@ -221,6 +318,48 @@ func stackLenPDA(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func showMembers(w http.ResponseWriter, r *http.Request) {
+	var vars = mux.Vars(r)
+	var id = vars["gid"]
+	var memberArray []string
+	for i := 0; i < len(replicaGroupArray); i++ {
+		if replicaGroupArray[i].GID == id {
+			memberArray = replicaGroupArray[i].GroupMembers
+			break
+		}
+		json.NewEncoder(w).Encode(memberArray)
+	}
+}
+
+func showRandomMember(w http.ResponseWriter, r *http.Request) {
+	var vars = mux.Vars(r)
+	var id = vars["gid"]
+	var randomMember string
+	for i := 0; i < len(replicaGroupArray); i++ {
+		if replicaGroupArray[i].GID == id {
+			memberLen := len(replicaGroupArray[i].GroupMembers) - 1
+			randomMemberIndex := rand.Intn(memberLen)
+			randomMember = replicaGroupArray[i].GroupMembers[randomMemberIndex]
+			break
+		}
+		json.NewEncoder(w).Encode(randomMember)
+	}
+}
+
+func showPdaCode(w http.ResponseWriter, r *http.Request) {
+	var vars = mux.Vars(r)
+	var id = vars["id"]
+	var pda PdaProcessor
+	for i := 0; i < len(replicaGroupArray); i++ {
+		for j := 0; j < len(replicaGroupArray[i].GroupMembers); j++ {
+			if replicaGroupArray[i].GroupMembers[j] == id {
+				pda = replicaGroupArray[i].GroupCode
+			}
+		}
+		json.NewEncoder(w).Encode(pda)
+	}
+}
+
 func statePDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
@@ -236,6 +375,9 @@ func statePDA(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(cs)
 	return
+}
+
+func closeReplica(w http.ResponseWriter, r *http.Request) {
 }
 
 func snapshotPDA(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +421,16 @@ func handleRequests() {
 	myRouter.HandleFunc("/pdas/{id}/tokens/{position}", putPda).Methods("PUT")
 	myRouter.HandleFunc("/pdas/{id}/tokens", getTokens).Methods("GET")
 	myRouter.HandleFunc("/pdas/{id}/delete", deletePda).Methods("DELETE")
+
+	myRouter.HandleFunc("/replica_pdas/{gid}", createNewReplicaGroup).Methods("PUT")
+	myRouter.HandleFunc("/replica_pdas", showReplicaGroups).Methods("GET")
+	myRouter.HandleFunc("/replica_pdas/{gid}/reset", resetReplicaGroup).Methods("PUT")
+	myRouter.HandleFunc("/replica_pdas/{gid}/members", showMembers).Methods("GET")
+	myRouter.HandleFunc("/replica_pdas/{gid}/connect", showRandomMember).Methods("GET")
+	myRouter.HandleFunc("/replica_pdas/{gid}/close", closeReplica).Methods("PUT")
+	myRouter.HandleFunc("/replica_pdas/{gid}/delete", deleteReplica).Methods("DELETE")
+	myRouter.HandleFunc("/pdas/{id}/join", joinPda).Methods("PUT")
+	myRouter.HandleFunc("/pdas/{id}/code", showPdaCode).Methods("GET")
 
 	//Rhea's APIs
 

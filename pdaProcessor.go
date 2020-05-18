@@ -25,6 +25,9 @@ type PdaProcessor struct {
 	// Holds the current state.
 	CurrentState string
 
+	// Holds group ID
+	GID string
+
 	// Token at the top of the stack.
 	CurrentStack string
 
@@ -90,10 +93,24 @@ var replicaGroupArray []ReplicaGroup
 
 // Declares the end of string
 func eos(pda *PdaProcessor) {
-	if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
+	if len(pda.TransitionStack) > 0 {
+		if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
+			pda.CurrentStack = pda.TokenStack[0]
+			pda.CurrentState = "q4"
+			pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+			pop(pda)
+			if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
+				fmt.Println(pda.TransitionStack[len(pda.TransitionStack)-1])
+				fmt.Println("pda=", pda.Name, ":method=eos:: Reached the End of String")
+			} else {
+				fmt.Println("pda=", pda.Name, ":method=eos:: Did not reach the end of string but EOS was called.")
+			}
+		}
+	} else if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
+		fmt.Println(pda.TransitionStack[len(pda.TransitionStack)-1])
 		fmt.Println("pda=", pda.Name, ":method=eos:: Reached the End of String")
 	} else {
-		fmt.Println("pda=", pda.Name, ":method=eos::Did not reach the end of string but EOS was called.")
+		fmt.Println("pda=", pda.Name, ":method=eos:: Did not reach the end of string but EOS was called.")
 	}
 }
 
@@ -129,39 +146,51 @@ func openReplicaGroup(w http.ResponseWriter, r *http.Request) bool {
 	params := mux.Vars(r)
 	var rg ReplicaGroup
 	json.Unmarshal(reqBody, &rg)
-
 	if len(replicaGroupArray) > 0 {
 		for i := 0; i < len(replicaGroupArray); i++ {
 			if replicaGroupArray[i].GID == params["gid"] {
 				return false
 			}
 			replicaGroupArray = append(replicaGroupArray, rg)
+			replicaGroupArray[i].GID = params["gid"]
 		}
 	} else {
 		// update our global replicaGroupArray array
 		replicaGroupArray = append(replicaGroupArray, rg)
+		replicaGroupArray[0].GID = params["gid"]
 	}
 
 	for j := 0; j < len(replicaGroupArray); j++ {
-		if replicaGroupArray[j].GID == rg.GID {
+		if replicaGroupArray[j].GID == params["gid"] {
 			gcode := replicaGroupArray[j].GroupCode
 			for k := 0; k < len(replicaGroupArray[j].GroupMembers); k++ {
 				member := replicaGroupArray[j].GroupMembers
-				for l := 0; l < len(pdaArr); l++ {
-					if member[k] == pdaArr[l].ID {
-						pdaArr[l].States = gcode.States
-						pdaArr[l].InputAlphabet = gcode.InputAlphabet
-						pdaArr[l].StackAlphabet = gcode.StackAlphabet
-						pdaArr[l].AcceptingStates = gcode.AcceptingStates
-						pdaArr[l].StartState = gcode.StartState
-						pdaArr[l].Transitions = gcode.Transitions
-						pdaArr[l].Eos = gcode.Eos
-					} else {
-						pdaArr = append(pdaArr, gcode)
-						pdaArr[len(pdaArr)-1].ID = member[l]
+				if len(pdaArr) > 0 {
+					for l := 0; l < len(pdaArr); l++ {
+						if member[k] == pdaArr[l].ID {
+							pdaArr[l].States = gcode.States
+							pdaArr[l].GID = replicaGroupArray[j].GID
+							pdaArr[l].InputAlphabet = gcode.InputAlphabet
+							pdaArr[l].StackAlphabet = gcode.StackAlphabet
+							pdaArr[l].AcceptingStates = gcode.AcceptingStates
+							pdaArr[l].StartState = gcode.StartState
+							pdaArr[l].Transitions = gcode.Transitions
+							pdaArr[l].Eos = gcode.Eos
+							break
+						} else {
+							pdaArr = append(pdaArr, gcode)
+							pdaArr[len(pdaArr)-1].ID = member[k]
+							pdaArr[len(pdaArr)-1].GID = replicaGroupArray[j].GID
+							break
+						}
 					}
+				} else {
+					pdaArr = append(pdaArr, gcode)
+					pdaArr[0].ID = member[k]
+					pdaArr[0].GID = replicaGroupArray[j].GID
 				}
 			}
+			break
 		}
 	}
 
@@ -175,16 +204,65 @@ func check(e error) {
 	}
 }
 
-func put(pda *PdaProcessor, position int, token string) {
+func addCookie(w http.ResponseWriter, pda *PdaProcessor) {
+	var gid string
+	var pdaID string
+	gid = pda.GID
+	pdaID = pda.ID
+	cookie := http.Cookie{
+		Name:  "pdaID",
+		Value: pdaID,
+	}
+	cookies := http.Cookie{
+		Name:  "gid",
+		Value: gid,
+	}
+	http.SetCookie(w, &cookie)
+	http.SetCookie(w, &cookies)
+}
+
+func put(w http.ResponseWriter, pda *PdaProcessor, position int, token string, pdaID string, gid string) {
 	pda.PutCounter++
 	var takeToken bool
 	transitions := pda.Transitions
 	transitionLength := len(transitions)
 	pda.CurrentStack = "null"
 	pda.IsAccepted = false
-	if pda.PutCounter == 1 {
-		putForTFirst(pda)
+	if pdaID != "0" && gid != "0" {
+		if pda.GID == gid {
+			for i := 0; i < len(pdaArr); i++ {
+				if pdaArr[i].ID == pdaID {
+					pda.TransitionStack = pdaArr[i].TransitionStack
+					pda.CurrentState = pdaArr[i].CurrentState
+					pda.CurrentStack = pdaArr[i].CurrentStack
+					pda.TokenStack = pdaArr[i].TokenStack
+					pda.IsAccepted = pdaArr[i].IsAccepted
+					pda.HoldBackPosition = pdaArr[i].HoldBackPosition
+					pda.HoldBackToken = pdaArr[i].HoldBackToken
+					pda.LastPosition = pdaArr[i].LastPosition
+					pda.EosPosition = pdaArr[i].EosPosition
+				}
+			}
+		}
 	}
+	if pda.CurrentState == pda.StartState {
+		putForTFirst(w, pda)
+	}
+
+	if pda.EosPosition == pda.LastPosition && pda.LastPosition != 0 {
+		takeToken = false
+		if len(pda.TransitionStack) > 0 {
+			if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
+				pda.CurrentStack = pda.TokenStack[0]
+				pda.CurrentState = "q4"
+				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+				pop(pda)
+			}
+			eos(pda)
+			return
+		}
+	}
+
 	if position == 1 || position == (pda.LastPosition+1) {
 		takeToken = true
 		pda.LastPosition = position
@@ -206,12 +284,14 @@ gotoPoint:
 				if t[4] != "null" {
 					push(pda, t[4])
 					pda.CurrentStack = t[4]
+					addCookie(w, pda)
 				} else {
 					if len(pda.TokenStack) == 0 {
 						pda.IsAccepted = false
 						break
 					} else {
 						pop(pda)
+						addCookie(w, pda)
 						break
 					}
 				}
@@ -241,7 +321,8 @@ gotoPoint:
 
 // Put method for the first transition with no input
 
-func putForTFirst(pda *PdaProcessor) {
+func putForTFirst(w http.ResponseWriter, pda *PdaProcessor) {
+
 	if pda.Transitions[0][0] == pda.CurrentState {
 		pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
 		pda.CurrentState = pda.Transitions[0][3]

@@ -35,7 +35,6 @@ func createNewPda(w http.ResponseWriter, r *http.Request) {
 	var rValue bool
 	if len(pdaArr) > 0 {
 		for i := 0; i < len(pdaArr); i++ {
-			fmt.Println(pdaArr[i].ID)
 			if pdaArr[i].ID == params["id"] {
 				enter = false
 				fmt.Fprintf(w, "PDA already exists")
@@ -64,6 +63,7 @@ func createNewReplicaGroup(w http.ResponseWriter, r *http.Request) {
 	var enter bool
 	var rValue bool
 	var id = vars["gid"]
+
 	if len(replicaGroupArray) > 0 {
 		for i := 0; i < len(replicaGroupArray); i++ {
 			if replicaGroupArray[i].GID == id {
@@ -99,6 +99,7 @@ func joinPda(w http.ResponseWriter, r *http.Request) {
 			for l := 0; l < len(pdaArr); l++ {
 				if id == pdaArr[l].ID {
 					pdaArr[l].States = gcode.States
+					pdaArr[l].GID = replicaGroupArray[i].GID
 					pdaArr[l].InputAlphabet = gcode.InputAlphabet
 					pdaArr[l].StackAlphabet = gcode.StackAlphabet
 					pdaArr[l].AcceptingStates = gcode.AcceptingStates
@@ -134,10 +135,17 @@ func resetReplicaGroup(w http.ResponseWriter, r *http.Request) {
 	var id = vars["gid"]
 	for i := 0; i < len(replicaGroupArray); i++ {
 		if replicaGroupArray[i].GID == id {
-			groupCode := replicaGroupArray[i].GroupCode
-			groupCode.TokenStack = []string{}
-			groupCode.CurrentState = groupCode.StartState
-			groupCode.TransitionStack = []string{}
+			members := replicaGroupArray[i].GroupMembers
+			for j := 0; j < len(members); j++ {
+				for k := 0; k < len(pdaArr); k++ {
+					if members[j] == pdaArr[k].ID {
+						pdaArr[k].TokenStack = []string{}
+						pdaArr[k].CurrentState = pdaArr[k].StartState
+						pdaArr[k].TransitionStack = []string{}
+						break
+					}
+				}
+			}
 			break
 		} else {
 			fmt.Fprintf(w, "Error finding PDA")
@@ -145,17 +153,35 @@ func resetReplicaGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func ReadCookie(w http.ResponseWriter, r *http.Request) (string, string) {
+	c1, err := r.Cookie("pdaID")
+	c2, err := r.Cookie("gid")
+	if err != nil {
+		// w.Write([]byte("error in reading cookie : " + err.Error() + "\n"))
+	} else {
+		value := c1.Value
+		value2 := c2.Value
+		return value, value2
+	}
+	return "0", "0"
+}
+
 func putPda(w http.ResponseWriter, r *http.Request) {
 	reqBody, _ := ioutil.ReadAll(r.Body)
 	params := mux.Vars(r)
 	var token TokenList
+	var data string
+	pdaID, gid := ReadCookie(w, r)
 	position := params["position"]
 	id := params["id"]
+	json.Unmarshal(reqBody, &data)
 	json.Unmarshal(reqBody, &token)
 	positionInt, err := strconv.Atoi(position)
+	error := false
 	if err == nil {
 		for i := 0; i < len(pdaArr); i++ {
 			if pdaArr[i].ID == id {
+				error = false
 				if pdaArr[i].LastPosition == positionInt {
 					fmt.Fprintf(w, "This position is already taken, please input TOKEN for a new position")
 				} else {
@@ -169,13 +195,16 @@ func putPda(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprintf(w, "This position is already taken, please input TOKEN for a new position")
 						break
 					} else {
-						put(&pdaArr[i], positionInt, token.Tokens)
+						put(w, &pdaArr[i], positionInt, token.Tokens, pdaID, gid)
 						break
 					}
 				}
 			} else {
-				fmt.Fprintf(w, "Error finding PDA")
+				error = true
 			}
+		}
+		if error {
+			fmt.Fprintf(w, "Error finding PDA")
 		}
 	} else {
 		fmt.Fprintf(w, "%s", err)
@@ -242,11 +271,39 @@ func deleteReplica(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func updatePDA(pdaID string, gid string, pda *PdaProcessor) {
+	if pdaID != "0" && gid != "0" {
+		if pda.GID == gid {
+			for i := 0; i < len(pdaArr); i++ {
+				if pdaArr[i].ID == pdaID {
+					pda.TransitionStack = pdaArr[i].TransitionStack
+					pda.CurrentState = pdaArr[i].CurrentState
+					pda.CurrentStack = pdaArr[i].CurrentStack
+					pda.TokenStack = pdaArr[i].TokenStack
+					pda.IsAccepted = pdaArr[i].IsAccepted
+					pda.HoldBackPosition = pdaArr[i].HoldBackPosition
+					pda.HoldBackToken = pdaArr[i].HoldBackToken
+					pda.LastPosition = pdaArr[i].LastPosition
+					pda.EosPosition = pdaArr[i].EosPosition
+					break
+				}
+			}
+		}
+	}
+}
+
 func eosPDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	var pos = vars["position"]
 	position, err := strconv.Atoi(pos)
+	pdaID, gid := ReadCookie(w, r)
+	for i := 0; i < len(pdaArr); i++ {
+		if pdaArr[i].ID == id {
+			updatePDA(pdaID, gid, &pdaArr[i])
+			break
+		}
+	}
 	if err != nil {
 		fmt.Fprintf(w, "%s", err)
 	} else {
@@ -340,9 +397,9 @@ func showRandomMember(w http.ResponseWriter, r *http.Request) {
 			memberLen := len(replicaGroupArray[i].GroupMembers) - 1
 			randomMemberIndex := rand.Intn(memberLen)
 			randomMember = replicaGroupArray[i].GroupMembers[randomMemberIndex]
+			json.NewEncoder(w).Encode(randomMember)
 			break
 		}
-		json.NewEncoder(w).Encode(randomMember)
 	}
 }
 

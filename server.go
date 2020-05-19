@@ -540,6 +540,30 @@ func updatePDA(pdaID string, gid string, pda *PdaProcessor) {
 	}
 }
 
+func c3state(w http.ResponseWriter, r *http.Request) {
+	var vars = mux.Vars(r)
+	var id = vars["id"]
+
+	var groupid string
+	var lastupdatedpdaid string
+
+	for i := 0; i < len(pdaArr); i++ {
+		if pdaArr[i].ID == id {
+			groupid = pdaArr[i].GID
+		}
+	}
+
+	for i := 0; i < len(pdaArr); i++ {
+		if pdaArr[i].GID == groupid || pdaArr[i].TransitionCounter > 0 {
+			lastupdatedpdaid = pdaArr[i].ID
+		}
+	}
+
+	json.NewEncoder(w).Encode(groupid)          // Replica Group ID
+	json.NewEncoder(w).Encode(lastupdatedpdaid) // Last Updated PDA in Replica Group
+
+}
+
 func handleRequests() {
 	// creates a new instance of a mux router
 	myRouter := mux.NewRouter().StrictSlash(true)

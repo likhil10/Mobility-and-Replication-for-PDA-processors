@@ -162,7 +162,8 @@ func isAcceptedPDA(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	addCookie(w, "last-updated-pda-id", id)
+	addCookie(w, "pdaID", pdaArr[i].ID)
+	addCookie(w, "gid", pdaArr[i].GID)
 	json.NewEncoder(w).Encode(accepted)
 	return
 }
@@ -195,7 +196,8 @@ func stackTopPDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(returnStack)
-	addCookie(w, "last-updated-pda-id", id)
+	addCookie(w, "pdaID", pdaArr[i].ID)
+	addCookie(w, "gid", pdaArr[i].GID)
 	return
 }
 
@@ -223,7 +225,8 @@ func stackLenPDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(length)
-	addCookie(w, "last-updated-pda-id", id)
+	addCookie(w, "pdaID", pdaArr[i].ID)
+	addCookie(w, "gid", pdaArr[i].GID)
 	return
 }
 
@@ -251,7 +254,8 @@ func statePDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(cs)
-	addCookie(w, "last-updated-pda-id", id)
+	addCookie(w, "pdaID", pdaArr[i].ID)
+	addCookie(w, "gid", pdaArr[i].GID)
 	return
 }
 
@@ -278,7 +282,8 @@ func getTokens(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	addCookie(w, "last-updated-pda-id", id)
+	addCookie(w, "pdaID", pdaArr[i].ID)
+	addCookie(w, "gid", pdaArr[i].GID)
 	return
 }
 
@@ -500,14 +505,10 @@ func showPdaCode(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func c3state(w http.ResponseWriter, r *http.Request) {
-
-}
-
 //ReadCookies -> Helper function to process cookies passed in request
 func ReadCookies(w http.ResponseWriter, r *http.Request) (string, string) {
-	c1, err := r.Cookie("group-id")
-	c2, err := r.Cookie("last-updated-pda-id")
+	c1, err := r.Cookie("gid")
+	c2, err := r.Cookie("pdaID")
 	if err != nil {
 		fmt.Printf("Cant find cookie :/\r\n")
 	}
@@ -521,19 +522,20 @@ func ReadCookies(w http.ResponseWriter, r *http.Request) (string, string) {
 // Helper function to sync base/pda APIs with last updated PDA
 func updatePDA(pdaID string, gid string, pda *PdaProcessor) {
 	if pdaID != "0" && gid != "0" {
-		if pda.GID == gid {
-			for i := 0; i < len(pdaArr); i++ {
-				if pdaArr[i].ID == pdaID {
-					pda.TransitionStack = pdaArr[i].TransitionStack
-					pda.CurrentState = pdaArr[i].CurrentState
-					pda.CurrentStack = pdaArr[i].CurrentStack
-					pda.TokenStack = pdaArr[i].TokenStack
-					pda.IsAccepted = pdaArr[i].IsAccepted
-					pda.HoldBackPosition = pdaArr[i].HoldBackPosition
-					pda.HoldBackToken = pdaArr[i].HoldBackToken
-					pda.LastPosition = pdaArr[i].LastPosition
-					pda.EosPosition = pdaArr[i].EosPosition
-					break
+		if pdaID != pda.ID {
+			if pda.GID == gid {
+				for i := 0; i < len(pdaArr); i++ {
+					if pdaArr[i].ID == pdaID {
+						pda.TransitionStack = pdaArr[i].TransitionStack
+						pda.CurrentState = pdaArr[i].CurrentState
+						pda.CurrentStack = pdaArr[i].CurrentStack
+						pda.TokenStack = pdaArr[i].TokenStack
+						pda.IsAccepted = pdaArr[i].IsAccepted
+						pda.HoldBackPosition = pdaArr[i].HoldBackPosition
+						pda.HoldBackToken = pdaArr[i].HoldBackToken
+						pda.LastPosition = pdaArr[i].LastPosition
+						pda.EosPosition = pdaArr[i].EosPosition
+					}
 				}
 			}
 		}

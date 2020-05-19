@@ -91,29 +91,6 @@ var tokenArr []TokenList
 var positionArr []int
 var replicaGroupArray []ReplicaGroup
 
-// Declares the end of string
-func eos(pda *PdaProcessor) {
-	if len(pda.TransitionStack) > 0 {
-		if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
-			pda.CurrentStack = pda.TokenStack[0]
-			pda.CurrentState = "q4"
-			pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
-			pop(pda)
-			if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
-				fmt.Println(pda.TransitionStack[len(pda.TransitionStack)-1])
-				fmt.Println("pda=", pda.Name, ":method=eos:: Reached the End of String")
-			} else {
-				fmt.Println("pda=", pda.Name, ":method=eos:: Did not reach the end of string but EOS was called.")
-			}
-		}
-	} else if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
-		fmt.Println(pda.TransitionStack[len(pda.TransitionStack)-1])
-		fmt.Println("pda=", pda.Name, ":method=eos:: Reached the End of String")
-	} else {
-		fmt.Println("pda=", pda.Name, ":method=eos:: Did not reach the end of string but EOS was called.")
-	}
-}
-
 // Unmarshals the jsonText string. Returns true if it succeeds.
 func open(w http.ResponseWriter, r *http.Request) bool {
 
@@ -136,6 +113,165 @@ func open(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	return true
+}
+
+// Declares the end of string
+func eos(pda *PdaProcessor) {
+	if len(pda.TransitionStack) > 0 {
+		if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
+			pda.CurrentStack = pda.TokenStack[0]
+			pda.CurrentState = "q4"
+			pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+			pop(pda)
+			if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
+				fmt.Println("pda=", pda.ID, ":method=eos:: Reached the End of String")
+			} else {
+				fmt.Println("pda=", pda.ID, ":method=eos:: Did not reach the end of string but EOS was called.")
+			}
+		}
+	} else if len(pda.TransitionStack) > 0 && pda.TransitionStack[0] == "q1" && pda.TransitionStack[len(pda.TransitionStack)-1] == "q4" {
+		fmt.Println(pda.TransitionStack[len(pda.TransitionStack)-1])
+		fmt.Println("pda=", pda.Name, ":method=eos:: Reached the End of String")
+	} else {
+		fmt.Println("pda=", pda.Name, ":method=eos:: Did not reach the end of string but EOS was called.")
+	}
+}
+
+func put(w http.ResponseWriter, pda *PdaProcessor, position int, token string, pdaID string, gid string) {
+	pda.PutCounter++
+	var takeToken bool
+	transitions := pda.Transitions
+	transitionLength := len(transitions)
+	pda.CurrentStack = "null"
+	pda.IsAccepted = false
+	if pdaID != "0" && gid != "0" {
+		if pdaID != pda.ID {
+			if pda.GID == gid {
+				for i := 0; i < len(pdaArr); i++ {
+					if pdaArr[i].ID == pdaID {
+						pda.TransitionStack = pdaArr[i].TransitionStack
+						pda.CurrentState = pdaArr[i].CurrentState
+						pda.CurrentStack = pdaArr[i].CurrentStack
+						pda.TokenStack = pdaArr[i].TokenStack
+						pda.IsAccepted = pdaArr[i].IsAccepted
+						pda.HoldBackPosition = pdaArr[i].HoldBackPosition
+						pda.HoldBackToken = pdaArr[i].HoldBackToken
+						pda.LastPosition = pdaArr[i].LastPosition
+						pda.EosPosition = pdaArr[i].EosPosition
+					}
+				}
+			}
+		}
+	}
+	if pda.CurrentState == pda.StartState {
+		putForTFirst(w, pda)
+	}
+
+	if pda.EosPosition == pda.LastPosition && pda.LastPosition != 0 {
+		takeToken = false
+		if len(pda.TransitionStack) > 0 {
+			if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
+				pda.CurrentStack = pda.TokenStack[0]
+				pda.CurrentState = "q4"
+				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+				pop(pda)
+			}
+			eos(pda)
+			return
+		}
+	}
+
+	if position == 1 || position == (pda.LastPosition+1) {
+		takeToken = true
+		pda.LastPosition = position
+	} else if takeToken == false {
+		pda.HoldBackToken = append(pda.HoldBackToken, token)
+		pda.HoldBackPosition = append(pda.HoldBackPosition, position)
+	}
+gotoPoint:
+	if takeToken {
+		takeToken = false
+		for j := 1; j < transitionLength; j++ {
+			t := transitions[j]
+			if t[0] == pda.CurrentState && t[1] == token && t[2] == pda.CurrentStack {
+				pda.IsAccepted = true
+				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+				pda.TransitionCounter++
+				pda.CurrentState = t[3]
+				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
+				if t[4] != "null" {
+					push(pda, t[4])
+					pda.CurrentStack = t[4]
+					addCookie(w, "gid", pda.GID)
+					addCookie(w, "pdaID", pda.ID)
+				} else {
+					if len(pda.TokenStack) == 0 {
+						pda.IsAccepted = false
+						break
+					} else {
+						pop(pda)
+						addCookie(w, "gid", pda.GID)
+						addCookie(w, "pdaID", pda.ID)
+						break
+					}
+				}
+			}
+			if len(pda.TokenStack) > 1 {
+				pda.CurrentStack = pda.TokenStack[len(pda.TokenStack)-1]
+			} else {
+				break
+			}
+		}
+	}
+	if takeToken == false {
+		for i := 0; i < len(pda.HoldBackPosition); i++ {
+			if pda.HoldBackPosition[i] == (pda.LastPosition + 1) {
+				takeToken = true
+				token = pda.HoldBackToken[i]
+				pda.LastPosition = pda.HoldBackPosition[i]
+				pda.HoldBackPosition = append(pda.HoldBackPosition[:i], pda.HoldBackPosition[i+1:]...)
+				pda.HoldBackToken = append(pda.HoldBackToken[:i], pda.HoldBackToken[i+1:]...)
+				pda.CurrentStack = "null"
+				pda.IsAccepted = false
+				goto gotoPoint
+			}
+		}
+	}
+}
+
+func isAccepted(pda *PdaProcessor) bool {
+	pda.IsAcceptedCount++
+	if len(pda.TokenStack) == 0 && pda.IsAccepted == true {
+		return true
+	}
+	return false
+}
+
+// Returns the current state
+func currentState(pda *PdaProcessor) string {
+	pda.CurrentStateCounter++
+	return pda.CurrentState
+}
+
+// Return up to k stack tokens from the top of the stack (default k=1) without modifying the stack.
+func peek(pda *PdaProcessor, k int) []string {
+	pda.Peek++
+	if len(pda.TokenStack) > 0 {
+		if len(pda.TokenStack) < k {
+			return pda.TokenStack
+		} else if len(pda.TokenStack) > k {
+			x := len(pda.TokenStack) - (k - 1)
+			return pda.TokenStack[x-1:]
+		} else if len(pda.TokenStack) == k {
+			return pda.TokenStack[:k]
+		}
+	}
+	return pda.TokenStack
+}
+
+// Garbage disposal method
+func close() {
+
 }
 
 // Unmarshals the jsonText string. Returns true if it succeeds.
@@ -197,6 +333,8 @@ func openReplicaGroup(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// Helper Functions
+
 // A function that calls panic if it detects an error.
 func check(e error) {
 	if e != nil {
@@ -204,119 +342,21 @@ func check(e error) {
 	}
 }
 
-func addCookie(w http.ResponseWriter, pda *PdaProcessor) {
-	var gid string
-	var pdaID string
-	gid = pda.GID
-	pdaID = pda.ID
-	cookie := http.Cookie{
-		Name:  "pdaID",
-		Value: pdaID,
-	}
-	cookies := http.Cookie{
-		Name:  "gid",
-		Value: gid,
-	}
-	http.SetCookie(w, &cookie)
-	http.SetCookie(w, &cookies)
+func push(pda *PdaProcessor, x string) {
+	pda.TokenStack = append(pda.TokenStack, x)
 }
 
-func put(w http.ResponseWriter, pda *PdaProcessor, position int, token string, pdaID string, gid string) {
-	pda.PutCounter++
-	var takeToken bool
-	transitions := pda.Transitions
-	transitionLength := len(transitions)
-	pda.CurrentStack = "null"
-	pda.IsAccepted = false
-	if pdaID != "0" && gid != "0" {
-		if pda.GID == gid {
-			for i := 0; i < len(pdaArr); i++ {
-				if pdaArr[i].ID == pdaID {
-					pda.TransitionStack = pdaArr[i].TransitionStack
-					pda.CurrentState = pdaArr[i].CurrentState
-					pda.CurrentStack = pdaArr[i].CurrentStack
-					pda.TokenStack = pdaArr[i].TokenStack
-					pda.IsAccepted = pdaArr[i].IsAccepted
-					pda.HoldBackPosition = pdaArr[i].HoldBackPosition
-					pda.HoldBackToken = pdaArr[i].HoldBackToken
-					pda.LastPosition = pdaArr[i].LastPosition
-					pda.EosPosition = pdaArr[i].EosPosition
-				}
-			}
-		}
-	}
-	if pda.CurrentState == pda.StartState {
-		putForTFirst(w, pda)
+func pop(pda *PdaProcessor) {
+	pda.TokenStack = pda.TokenStack[:len(pda.TokenStack)-1]
+}
+
+func addCookie(w http.ResponseWriter, name string, value string) {
+	cookie := http.Cookie{
+		Name:  name,
+		Value: value,
 	}
 
-	if pda.EosPosition == pda.LastPosition && pda.LastPosition != 0 {
-		takeToken = false
-		if len(pda.TransitionStack) > 0 {
-			if pda.TransitionStack[len(pda.TransitionStack)-1] == "q3" && len(pda.TokenStack) == 1 && pda.IsAccepted == true {
-				pda.CurrentStack = pda.TokenStack[0]
-				pda.CurrentState = "q4"
-				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
-				pop(pda)
-			}
-			eos(pda)
-			return
-		}
-	}
-
-	if position == 1 || position == (pda.LastPosition+1) {
-		takeToken = true
-		pda.LastPosition = position
-	} else if takeToken == false {
-		pda.HoldBackToken = append(pda.HoldBackToken, token)
-		pda.HoldBackPosition = append(pda.HoldBackPosition, position)
-	}
-gotoPoint:
-	if takeToken {
-		takeToken = false
-		for j := 1; j < transitionLength; j++ {
-			t := transitions[j]
-			if t[0] == pda.CurrentState && t[1] == token && t[2] == pda.CurrentStack {
-				pda.IsAccepted = true
-				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
-				pda.TransitionCounter++
-				pda.CurrentState = t[3]
-				pda.TransitionStack = append(pda.TransitionStack, pda.CurrentState)
-				if t[4] != "null" {
-					push(pda, t[4])
-					pda.CurrentStack = t[4]
-					addCookie(w, pda)
-				} else {
-					if len(pda.TokenStack) == 0 {
-						pda.IsAccepted = false
-						break
-					} else {
-						pop(pda)
-						addCookie(w, pda)
-						break
-					}
-				}
-			}
-			if len(pda.TokenStack) > 1 {
-				pda.CurrentStack = pda.TokenStack[len(pda.TokenStack)-1]
-			} else {
-				break
-			}
-		}
-	}
-	if takeToken == false {
-		for i := 0; i < len(pda.HoldBackPosition); i++ {
-			if pda.HoldBackPosition[i] == (pda.LastPosition + 1) {
-				takeToken = true
-				token = pda.HoldBackToken[i]
-				pda.LastPosition = pda.HoldBackPosition[i]
-				pda.HoldBackPosition = append(pda.HoldBackPosition[:i], pda.HoldBackPosition[i+1:]...)
-				pda.HoldBackToken = append(pda.HoldBackToken[:i], pda.HoldBackToken[i+1:]...)
-				pda.CurrentStack = "null"
-				pda.IsAccepted = false
-				goto gotoPoint
-			}
-		}
-	}
+	http.SetCookie(w, &cookie)
 }
 
 // Put method for the first transition with no input
@@ -329,22 +369,6 @@ func putForTFirst(w http.ResponseWriter, pda *PdaProcessor) {
 		push(pda, pda.Transitions[0][4])
 		pda.TransitionCounter++
 	}
-}
-
-func isAccepted(pda *PdaProcessor) bool {
-	pda.IsAcceptedCount++
-	if len(pda.TokenStack) == 0 && pda.IsAccepted == true {
-		return true
-	}
-	return false
-}
-
-func push(pda *PdaProcessor, x string) {
-	pda.TokenStack = append(pda.TokenStack, x)
-}
-
-func pop(pda *PdaProcessor) {
-	pda.TokenStack = pda.TokenStack[:len(pda.TokenStack)-1]
 }
 
 func queuedTokens(pda *PdaProcessor) {
@@ -360,26 +384,4 @@ func queuedTokens(pda *PdaProcessor) {
 			}
 		}
 	}
-}
-
-// Returns the current state
-func currentState(pda *PdaProcessor) string {
-	pda.CurrentStateCounter++
-	return pda.CurrentState
-}
-
-// Return up to k stack tokens from the top of the stack (default k=1) without modifying the stack.
-func peek(pda *PdaProcessor, k int) []string {
-	pda.Peek++
-	if len(pda.TokenStack) > 0 {
-		if len(pda.TokenStack) < k {
-			return pda.TokenStack
-		} else if len(pda.TokenStack) > k {
-			x := len(pda.TokenStack) - (k - 1)
-			return pda.TokenStack[x-1:]
-		} else if len(pda.TokenStack) == k {
-			return pda.TokenStack[:k]
-		}
-	}
-	return pda.TokenStack
 }

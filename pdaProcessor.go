@@ -202,16 +202,16 @@ gotoPoint:
 				if t[4] != "null" {
 					push(pda, t[4])
 					pda.CurrentStack = t[4]
-					addCookie(w, "gid", pda.GID)
 					addCookie(w, "pdaID", pda.ID)
+					addCookie(w, "gid", pda.GID)
 				} else {
 					if len(pda.TokenStack) == 0 {
 						pda.IsAccepted = false
 						break
 					} else {
 						pop(pda)
-						addCookie(w, "gid", pda.GID)
 						addCookie(w, "pdaID", pda.ID)
+						addCookie(w, "gid", pda.GID)
 						break
 					}
 				}

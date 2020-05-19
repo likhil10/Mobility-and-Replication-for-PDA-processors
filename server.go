@@ -143,7 +143,7 @@ func isAcceptedPDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	var accepted bool
-
+	var pdas PdaProcessor
 	groupid, pdaid := ReadCookies(w, r)
 
 	for i := 0; i < len(pdaArr); i++ {
@@ -155,6 +155,7 @@ func isAcceptedPDA(w http.ResponseWriter, r *http.Request) {
 
 	for l := 0; l < len(pdaArr); l++ {
 		if pdaArr[l].ID == id {
+			pdas = pdaArr[l]
 			accepted = isAccepted(&pdaArr[l])
 			break
 		} else {
@@ -162,8 +163,8 @@ func isAcceptedPDA(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	addCookie(w, "pdaID", pdaArr[i].ID)
-	addCookie(w, "gid", pdaArr[i].GID)
+	addCookie(w, "pdaID", pdas.ID)
+	addCookie(w, "gid", pdas.GID)
 	json.NewEncoder(w).Encode(accepted)
 	return
 }
@@ -172,7 +173,7 @@ func stackTopPDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	var kStr = vars["k"]
-
+	var pdas PdaProcessor
 	var returnStack []string
 
 	k, err := strconv.Atoi(kStr)
@@ -184,6 +185,7 @@ func stackTopPDA(w http.ResponseWriter, r *http.Request) {
 
 	for i := 0; i < len(pdaArr); i++ {
 		if pdaArr[i].ID == id {
+			pdas = pdaArr[i]
 			updatePDA(pdaid, groupid, &pdaArr[i])
 			break
 		}
@@ -196,8 +198,8 @@ func stackTopPDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(returnStack)
-	addCookie(w, "pdaID", pdaArr[i].ID)
-	addCookie(w, "gid", pdaArr[i].GID)
+	addCookie(w, "pdaID", pdas.ID)
+	addCookie(w, "gid", pdas.GID)
 	return
 }
 
@@ -205,6 +207,7 @@ func stackLenPDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	var length int
+	var pdas PdaProcessor
 
 	groupid, pdaid := ReadCookies(w, r)
 
@@ -217,6 +220,7 @@ func stackLenPDA(w http.ResponseWriter, r *http.Request) {
 
 	for i := 0; i < len(pdaArr); i++ {
 		if pdaArr[i].ID == id {
+			pdas = pdaArr[i]
 			length = len(pdaArr[i].TokenStack)
 			break
 		} else {
@@ -225,8 +229,8 @@ func stackLenPDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(length)
-	addCookie(w, "pdaID", pdaArr[i].ID)
-	addCookie(w, "gid", pdaArr[i].GID)
+	addCookie(w, "pdaID", pdas.ID)
+	addCookie(w, "gid", pdas.GID)
 	return
 }
 
@@ -234,11 +238,13 @@ func statePDA(w http.ResponseWriter, r *http.Request) {
 	var vars = mux.Vars(r)
 	var id = vars["id"]
 	var cs string
+	var pdas PdaProcessor
 
 	groupid, pdaid := ReadCookies(w, r)
 
 	for i := 0; i < len(pdaArr); i++ {
 		if pdaArr[i].ID == id {
+			pdas = pdaArr[i]
 			updatePDA(pdaid, groupid, &pdaArr[i])
 			break
 		}
@@ -254,15 +260,15 @@ func statePDA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(cs)
-	addCookie(w, "pdaID", pdaArr[i].ID)
-	addCookie(w, "gid", pdaArr[i].GID)
+	addCookie(w, "pdaID", pdas.ID)
+	addCookie(w, "gid", pdas.GID)
 	return
 }
 
 func getTokens(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-
+	var pdas PdaProcessor
 	groupid, pdaid := ReadCookies(w, r)
 
 	for i := 0; i < len(pdaArr); i++ {
@@ -275,6 +281,7 @@ func getTokens(w http.ResponseWriter, r *http.Request) {
 	for _, pda := range pdaArr {
 		if pda.ID == id {
 			queuedTokens(&pda)
+			pdas = pda
 			json.NewEncoder(w).Encode(pda.HoldBackToken)
 			break
 		} else {
@@ -282,8 +289,8 @@ func getTokens(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	addCookie(w, "pdaID", pdaArr[i].ID)
-	addCookie(w, "gid", pdaArr[i].GID)
+	addCookie(w, "pdaID", pdas.ID)
+	addCookie(w, "gid", pdas.GID)
 	return
 }
 

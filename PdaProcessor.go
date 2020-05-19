@@ -332,6 +332,8 @@ func openReplicaGroup(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// Helper Functions
+
 // A function that calls panic if it detects an error.
 func check(e error) {
 	if e != nil {
